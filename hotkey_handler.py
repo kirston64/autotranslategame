@@ -1,12 +1,23 @@
 import time
+import threading
 import keyboard
 import pyperclip
 
 from translator import translate_text
 
 # Delays between simulated keystrokes (seconds)
-_STEP_DELAY = 0.05
-_COPY_DELAY = 0.10
+_STEP_DELAY = 0.08
+_COPY_DELAY = 0.15
+_BUSY = False
+
+
+def _release_modifiers():
+    """Release all modifier keys to prevent them from getting stuck."""
+    for key in ("ctrl", "shift", "alt"):
+        try:
+            keyboard.release(key)
+        except Exception:
+            pass
 
 
 def _select_all_and_copy() -> str:
@@ -14,14 +25,16 @@ def _select_all_and_copy() -> str:
     old_clip = pyperclip.paste()
     pyperclip.copy("")
 
-    keyboard.send("ctrl+a")
+    _release_modifiers()
     time.sleep(_STEP_DELAY)
-    keyboard.send("ctrl+c")
+
+    keyboard.press_and_release("ctrl+a")
+    time.sleep(_STEP_DELAY)
+    keyboard.press_and_release("ctrl+c")
     time.sleep(_COPY_DELAY)
 
     text = pyperclip.paste()
 
-    # Restore old clipboard if we got nothing
     if not text.strip():
         pyperclip.copy(old_clip)
 
@@ -32,45 +45,61 @@ def _paste_and_send(text: str):
     """Paste translated text and press Enter to send."""
     pyperclip.copy(text)
     time.sleep(_STEP_DELAY)
-    keyboard.send("ctrl+v")
+    keyboard.press_and_release("ctrl+v")
     time.sleep(_STEP_DELAY)
-    keyboard.send("enter")
+    keyboard.press_and_release("enter")
+
+
+def _do_translate(config, on_translation):
+    """Actual translation logic, runs in a separate thread."""
+    global _BUSY
+    try:
+        if not config.get("enabled", True):
+            time.sleep(_STEP_DELAY)
+            _release_modifiers()
+            keyboard.press_and_release("enter")
+            return
+
+        original = _select_all_and_copy()
+        if not original:
+            _release_modifiers()
+            keyboard.press_and_release("enter")
+            return
+
+        translated = translate_text(
+            original,
+            source_lang=config.get("source_lang", "auto"),
+            target_lang=config.get("target_lang", "en"),
+        )
+
+        if translated is None:
+            _release_modifiers()
+            keyboard.press_and_release("enter")
+            return
+
+        # Clear current text, paste translation, send
+        _release_modifiers()
+        keyboard.press_and_release("ctrl+a")
+        time.sleep(_STEP_DELAY)
+        _paste_and_send(translated)
+
+        if on_translation:
+            on_translation(original, translated)
+    except Exception as e:
+        print(f"[hotkey_handler] error: {e}")
+        _release_modifiers()
+    finally:
+        _BUSY = False
 
 
 def handle_translate_hotkey(config: dict, on_translation=None):
     """
     Called when the translate hotkey is pressed.
-    1. Selects all text in chat input
-    2. Copies it
-    3. Translates
-    4. Pastes translation and sends
-
-    on_translation: optional callback(original, translated) for overlay
+    Spawns a worker thread to avoid blocking the keyboard hook.
     """
-    if not config.get("enabled", True):
-        keyboard.send("enter")
+    global _BUSY
+    if _BUSY:
         return
-
-    original = _select_all_and_copy()
-    if not original:
-        keyboard.send("enter")
-        return
-
-    translated = translate_text(
-        original,
-        source_lang=config.get("source_lang", "auto"),
-        target_lang=config.get("target_lang", "en"),
-    )
-
-    if translated is None:
-        # Already in target language — just send as-is
-        keyboard.send("enter")
-        return
-
-    # Clear current text, paste translation, send
-    keyboard.send("ctrl+a")
-    time.sleep(_STEP_DELAY)
-    _paste_and_send(translated)
-
-    if on_translation:
-        on_translation(original, translated)
+    _BUSY = True
+    t = threading.Thread(target=_do_translate, args=(config, on_translation), daemon=True)
+    t.start()

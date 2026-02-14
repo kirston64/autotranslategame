@@ -37,7 +37,6 @@ def _on_start(config):
     keyboard.add_hotkey(
         hotkey,
         lambda: handle_translate_hotkey(config, on_translation=on_translation),
-        suppress=True,
     )
     print(f"[CS2 Translator] Active — hotkey: {hotkey}")
 
