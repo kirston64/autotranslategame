@@ -1,7 +1,17 @@
 import json
 import os
+import sys
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+def _get_base_dir():
+    """Get the directory where the exe (or script) is located."""
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller .exe
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+CONFIG_PATH = os.path.join(_get_base_dir(), "config.json")
 
 DEFAULT_CONFIG = {
     "hotkey": "ctrl+enter",
@@ -19,6 +29,8 @@ def load_config() -> dict:
             cfg = json.load(f)
         merged = {**DEFAULT_CONFIG, **cfg}
         return merged
+    # First run — create default config
+    save_config(DEFAULT_CONFIG)
     return dict(DEFAULT_CONFIG)
 
 
