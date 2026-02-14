@@ -1,0 +1,8 @@
+{
+    "hotkey": "ctrl+enter",
+    "source_lang": "auto",
+    "target_lang": "en",
+    "overlay_enabled": true,
+    "overlay_duration": 2.0,
+    "enabled": true
+}

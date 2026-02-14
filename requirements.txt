@@ -1,0 +1,6 @@
+keyboard>=0.13.5
+pyperclip>=1.8.2
+deep-translator>=1.11.4
+Pillow>=10.0.0
+customtkinter>=5.2.0
+pyinstaller>=6.0.0
